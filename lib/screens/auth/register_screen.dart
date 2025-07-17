@@ -1,7 +1,9 @@
 // File: lib/screens/auth/register_screen.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../quiz/quiz_screen.dart';
 import '../child/child_home_screen.dart';
+import '../../providers/auth_provider.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -32,15 +34,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
         _isLoading = true;
       });
 
-      // Simulate API call
-      await Future.delayed(const Duration(seconds: 2));
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
       
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-        
-        // Show success and navigate to quiz
+      final success = await authProvider.signUp(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+        username: _usernameController.text.trim(),
+      );
+      
+      setState(() {
+        _isLoading = false;
+      });
+
+      if (success) {
+        // Show success and navigate to quiz (new user needs personality assessment)
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Account created successfully! 🎉'),
@@ -59,6 +66,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
             );
           }
         });
+      } else {
+        // Show error message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(authProvider.errorMessage ?? 'Sign up failed'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
@@ -344,14 +359,19 @@ class _LoginScreenState extends State<LoginScreen> {
         _isLoading = true;
       });
 
-      // Simulate API call
-      await Future.delayed(const Duration(seconds: 2));
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
       
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-        
+      // For login, we'll use email field as email (in a real app, you'd have separate email/username fields)
+      final success = await authProvider.signIn(
+        email: _usernameController.text.trim(),
+        password: _passwordController.text,
+      );
+      
+      setState(() {
+        _isLoading = false;
+      });
+
+      if (success) {
         // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -360,29 +380,35 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         );
         
-        // For now, since we don't have real user data, let's assume this user hasn't taken the quiz
-        // In a real app, you'd check the database for user's quiz completion status
-        // TODO: Check if user has completed personality quiz in database
-        
+        // Check if user has completed quiz, if not send to quiz, otherwise dashboard
         Future.delayed(const Duration(seconds: 1), () {
           if (mounted) {
-            // Simulate checking user's quiz status
-            // For demo purposes, let's send them to quiz (as if they haven't taken it)
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const QuizScreen(),
-              ),
-            );
-            
-            // In a real app, this would be:
-            // if (user.hasCompletedQuiz) {
-            //   Navigator.pushAndRemoveUntil(context, ChildHomeScreen(), (route) => false);
-            // } else {
-            //   Navigator.pushReplacement(context, QuizScreen());
-            // }
+            if (authProvider.hasCompletedQuiz()) {
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ChildHomeScreen(),
+                ),
+                (route) => false,
+              );
+            } else {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const QuizScreen(),
+                ),
+              );
+            }
           }
         });
+      } else {
+        // Show error message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(authProvider.errorMessage ?? 'Login failed'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
@@ -508,11 +534,12 @@ class _LoginScreenState extends State<LoginScreen> {
                           
                           const SizedBox(height: 60),
                           
-                          // Username Field
+                          // Email/Username Field
                           TextFormField(
                             controller: _usernameController,
+                            keyboardType: TextInputType.emailAddress,
                             decoration: InputDecoration(
-                              hintText: 'Username',
+                              hintText: 'Email',
                               filled: true,
                               fillColor: const Color(0xFFF9F9F9),
                               border: OutlineInputBorder(
@@ -526,7 +553,10 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             validator: (value) {
                               if (value == null || value.isEmpty) {
-                                return 'Please enter your username';
+                                return 'Please enter your email';
+                              }
+                              if (!value.contains('@')) {
+                                return 'Please enter a valid email';
                               }
                               return null;
                             },

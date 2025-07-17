@@ -1,6 +1,11 @@
 // File: lib/screens/splash_screen.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'onboarding/onboarding_screen.dart';
+import '../providers/auth_provider.dart';
+import '../providers/book_provider.dart';
+import '../providers/user_provider.dart';
+import '../screens/child/child_home_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -17,17 +22,56 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   void _navigateAfterDelay() async {
+    // Initialize app data
+    final bookProvider = Provider.of<BookProvider>(context, listen: false);
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    
+    // Load books (initialize sample books if needed)
+    await bookProvider.loadAllBooks();
+    if (bookProvider.allBooks.isEmpty) {
+      await bookProvider.initializeSampleBooks();
+      await bookProvider.loadAllBooks();
+    }
+    
     await Future.delayed(const Duration(milliseconds: 3000));
     
     if (!mounted) return;
     
-    // Navigate to onboarding screen
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const OnboardingScreen(),
-      ),
-    );
+    // Check authentication status and navigate accordingly
+    if (authProvider.isAuthenticated) {
+      // Load user data
+      await userProvider.loadUserData(authProvider.userId!);
+      
+      if (authProvider.hasCompletedQuiz()) {
+        // User has completed quiz, load recommendations and go to dashboard
+        await bookProvider.loadRecommendedBooks(authProvider.getPersonalityTraits());
+        await bookProvider.loadUserProgress(authProvider.userId!);
+        
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const ChildHomeScreen(),
+          ),
+        );
+      } else {
+        // User needs to complete quiz
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const OnboardingScreen(),
+          ),
+        );
+      }
+    } else {
+      // Navigate to onboarding for new users
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const OnboardingScreen(),
+        ),
+      );
+    }
   }
 
   @override
@@ -59,113 +103,3 @@ class _SplashScreenState extends State<SplashScreen> {
     );
   }
 }
-
-
-
-
-
-
-
-// // File: lib/screens/splash_screen.dart
-// import 'package:flutter/material.dart';
-// import '../theme/app_theme.dart';
-// import '../screens/onboarding/onboarding_screen.dart';
-
-// class SplashScreen extends StatefulWidget {
-//   const SplashScreen({super.key});
-
-//   @override
-//   State<SplashScreen> createState() => _SplashScreenState();
-// }
-
-// class _SplashScreenState extends State<SplashScreen>
-//     with SingleTickerProviderStateMixin {
-//   late AnimationController _animationController;
-//   late Animation<double> _fadeAnimation;
-
-//   @override
-//   void initState() {
-//     super.initState();
-//     _initAnimations();
-//     _navigateAfterDelay();
-//   }
-
-//   void _initAnimations() {
-//     _animationController = AnimationController(
-//       duration: const Duration(milliseconds: 2000),
-//       vsync: this,
-//     );
-
-//     _fadeAnimation = Tween<double>(
-//       begin: 0.0,
-//       end: 1.0,
-//     ).animate(_animationController);
-
-//     _animationController.forward();
-//   }
-
-//   void _navigateAfterDelay() async {
-//     await Future.delayed(const Duration(milliseconds: 3000));
-    
-//     if (!mounted) return;
-    
-//     // Navigate to onboarding screen
-//     Navigator.pushReplacement(
-//       context,
-//       MaterialPageRoute(
-//         builder: (context) => const OnboardingScreen(),
-//       ),
-//     );
-//   }
-
-//   @override
-//   void dispose() {
-//     _animationController.dispose();
-//     super.dispose();
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       body: Container(
-//         decoration: const BoxDecoration(
-//           gradient: AppTheme.splashGradient,
-//         ),
-//         child: SafeArea(
-//           child: Center(
-//             child: AnimatedBuilder(
-//               animation: _animationController,
-//               builder: (context, child) {
-//                 return FadeTransition(
-//                   opacity: _fadeAnimation,
-//                   child: Column(
-//                     mainAxisAlignment: MainAxisAlignment.center,
-//                     children: [
-//                       // ReadMe Logo
-//                       RichText(
-//                         text: TextSpan(
-//                           children: [
-//                             TextSpan(
-//                               text: 'Read',
-//                               style: AppTheme.logoLarge,
-//                             ),
-//                             TextSpan(
-//                               text: 'Me',
-//                               style: AppTheme.logoLarge.copyWith(
-//                                 fontWeight: FontWeight.w400,
-//                               ),
-//                             ),
-//                           ],
-//                         ),
-//                       ),
-//                     ],
-//                   ),
-//                 );
-//               },
-//             ),
-//           ),
-//         ),
-//       ),
-//     );
-//   }
-// }

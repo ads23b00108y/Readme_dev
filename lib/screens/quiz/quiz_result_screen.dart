@@ -1,6 +1,10 @@
 // File: lib/screens/quiz/quiz_result_screen.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../child/child_home_screen.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/book_provider.dart';
+import '../../providers/user_provider.dart';
 
 class QuizResultScreen extends StatelessWidget {
   final List<String> answers;
@@ -291,15 +295,54 @@ class QuizResultScreen extends StatelessWidget {
                     ),
                     padding: const EdgeInsets.symmetric(vertical: 18),
                   ),
-                  onPressed: () {
-                    // Navigate to child dashboard
-                    Navigator.pushAndRemoveUntil(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ChildHomeScreen(),
-                      ),
-                      (route) => false, // Remove all previous routes
-                    );
+                  onPressed: () async {
+                    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                    final bookProvider = Provider.of<BookProvider>(context, listen: false);
+                    final userProvider = Provider.of<UserProvider>(context, listen: false);
+                    
+                    if (authProvider.userId != null) {
+                      // Save quiz results to Firebase
+                      final traitCounts = _calculatePersonalityTraits();
+                      final topTraits = _getTopTraits();
+                      
+                      final success = await authProvider.saveQuizResults(
+                        selectedAnswers: answers,
+                        traitScores: traitCounts,
+                        dominantTraits: topTraits,
+                      );
+                      
+                      if (success) {
+                        // Load user data and book recommendations
+                        await userProvider.loadUserData(authProvider.userId!);
+                        await bookProvider.loadRecommendedBooks(topTraits);
+                        await bookProvider.loadAllBooks();
+                        
+                        // Navigate to child dashboard
+                        Navigator.pushAndRemoveUntil(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ChildHomeScreen(),
+                          ),
+                          (route) => false, // Remove all previous routes
+                        );
+                      } else {
+                        // Show error and still navigate (fallback)
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Quiz completed! Some data may not be saved.'),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                        
+                        Navigator.pushAndRemoveUntil(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ChildHomeScreen(),
+                          ),
+                          (route) => false,
+                        );
+                      }
+                    }
                   },
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
