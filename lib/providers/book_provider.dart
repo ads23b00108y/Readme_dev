@@ -1,6 +1,10 @@
 // File: lib/providers/book_provider.dart
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/api_service.dart';
+import '../services/analytics_service.dart';
+import '../services/achievement_service.dart';
+import '../services/content_filter_service.dart';
 
 class Book {
   final String id;
@@ -112,17 +116,24 @@ class ReadingProgress {
 
 class BookProvider extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final ApiService _apiService = ApiService();
+  final AnalyticsService _analyticsService = AnalyticsService();
+  final AchievementService _achievementService = AchievementService();
+  final ContentFilterService _contentFilterService = ContentFilterService();
   
   List<Book> _allBooks = [];
   List<Book> _recommendedBooks = [];
   List<ReadingProgress> _userProgress = [];
+  List<Book> _filteredBooks = [];
   bool _isLoading = false;
   String? _error;
+  DateTime? _sessionStart;
 
   // Getters
   List<Book> get allBooks => _allBooks;
   List<Book> get recommendedBooks => _recommendedBooks;
   List<ReadingProgress> get userProgress => _userProgress;
+  List<Book> get filteredBooks => _filteredBooks;
   bool get isLoading => _isLoading;
   String? get error => _error;
 
@@ -187,8 +198,8 @@ class BookProvider extends ChangeNotifier {
     }
   }
 
-  // Load all books
-  Future<void> loadAllBooks() async {
+  // Load all books with content filtering
+  Future<void> loadAllBooks({String? userId}) async {
     try {
       _isLoading = true;
       _error = null;
@@ -203,6 +214,26 @@ class BookProvider extends ChangeNotifier {
           .map((doc) => Book.fromFirestore(doc))
           .toList();
 
+      // Apply content filtering if userId is provided
+      if (userId != null) {
+        final booksData = _allBooks.map((book) => {
+          'id': book.id,
+          'title': book.title,
+          'author': book.author,
+          'description': book.description,
+          'ageRating': book.ageRating,
+          'traits': book.traits,
+          'content': book.content,
+        }).toList();
+
+        final filteredBooksData = await _contentFilterService.filterBooks(booksData, userId);
+        final filteredIds = filteredBooksData.map((book) => book['id']).toSet();
+        
+        _filteredBooks = _allBooks.where((book) => filteredIds.contains(book.id)).toList();
+      } else {
+        _filteredBooks = _allBooks;
+      }
+
       _isLoading = false;
       notifyListeners();
     } catch (e) {
@@ -212,24 +243,34 @@ class BookProvider extends ChangeNotifier {
     }
   }
 
-  // Get recommended books based on personality traits
-  Future<void> loadRecommendedBooks(List<String> userTraits) async {
+  // Get recommended books based on personality traits with enhanced filtering
+  Future<void> loadRecommendedBooks(List<String> userTraits, {String? userId}) async {
     try {
       _isLoading = true;
       notifyListeners();
 
       if (_allBooks.isEmpty) {
-        await loadAllBooks();
+        await loadAllBooks(userId: userId);
       }
 
-      // Filter books that match user's personality traits
-      _recommendedBooks = _allBooks.where((book) {
-        return book.traits.any((trait) => userTraits.contains(trait));
-      }).toList();
+      // Use API service for enhanced recommendations
+      try {
+        final recommendedBooksData = await _apiService.getRecommendedBooks(userTraits);
+        final recommendedIds = recommendedBooksData.map((book) => book['id']).toSet();
+        
+        _recommendedBooks = (userId != null ? _filteredBooks : _allBooks)
+            .where((book) => recommendedIds.contains(book.id))
+            .toList();
+      } catch (e) {
+        // Fallback to local filtering if API fails
+        _recommendedBooks = (userId != null ? _filteredBooks : _allBooks).where((book) {
+          return book.traits.any((trait) => userTraits.contains(trait));
+        }).toList();
+      }
 
       // If no trait matches, show some default books
       if (_recommendedBooks.isEmpty) {
-        _recommendedBooks = _allBooks.take(3).toList();
+        _recommendedBooks = (userId != null ? _filteredBooks : _allBooks).take(3).toList();
       }
 
       _isLoading = false;
@@ -260,7 +301,7 @@ class BookProvider extends ChangeNotifier {
     }
   }
 
-  // Update reading progress
+  // Update reading progress with enhanced tracking
   Future<void> updateReadingProgress({
     required String userId,
     required String bookId,
@@ -271,6 +312,7 @@ class BookProvider extends ChangeNotifier {
     try {
       final progressPercentage = currentPage / totalPages;
       final isCompleted = currentPage >= totalPages;
+      final sessionEnd = DateTime.now();
 
       // Check if progress already exists
       final existingProgressQuery = await _firestore
@@ -305,6 +347,26 @@ class BookProvider extends ChangeNotifier {
         });
       }
 
+      // Track analytics
+      if (_sessionStart != null) {
+        final book = getBookById(bookId);
+        await _analyticsService.trackReadingSession(
+          bookId: bookId,
+          bookTitle: book?.title ?? 'Unknown',
+          pageNumber: currentPage,
+          totalPages: totalPages,
+          sessionDurationSeconds: sessionEnd.difference(_sessionStart!).inSeconds,
+          sessionStart: _sessionStart!,
+          sessionEnd: sessionEnd,
+        );
+      }
+
+      // Track content filter reading time
+      await _contentFilterService.trackReadingTime(userId, additionalReadingTime);
+
+      // Check and unlock achievements
+      await _checkAchievements(userId);
+
       // Reload user progress
       await loadUserProgress(userId);
     } catch (e) {
@@ -328,6 +390,91 @@ class BookProvider extends ChangeNotifier {
     } catch (e) {
       return null;
     }
+  }
+
+  // Start reading session
+  void startReadingSession() {
+    _sessionStart = DateTime.now();
+  }
+
+  // End reading session
+  void endReadingSession() {
+    _sessionStart = null;
+  }
+
+  // Check and unlock achievements
+  Future<void> _checkAchievements(String userId) async {
+    try {
+      // Get user stats
+      final completedBooks = _userProgress.where((p) => p.isCompleted).length;
+      final totalReadingTime = _userProgress.fold<int>(
+        0, 
+        (sum, progress) => sum + progress.readingTimeMinutes,
+      );
+
+      // Get analytics for streak calculation
+      final analytics = await _analyticsService.getUserReadingAnalytics(userId);
+      final currentStreak = analytics['currentStreak'] ?? 0;
+      final totalSessions = analytics['totalSessions'] ?? 0;
+
+      // Check achievements
+      await _achievementService.checkAndUnlockAchievements(
+        booksCompleted: completedBooks,
+        readingStreak: currentStreak,
+        totalReadingMinutes: totalReadingTime,
+        totalSessions: totalSessions,
+      );
+    } catch (e) {
+      print('Error checking achievements: $e');
+    }
+  }
+
+  // Get filtered books for user
+  Future<List<Book>> getFilteredBooks(String userId) async {
+    if (_filteredBooks.isEmpty && _allBooks.isNotEmpty) {
+      await loadAllBooks(userId: userId);
+    }
+    return _filteredBooks;
+  }
+
+  // Track book interaction
+  Future<void> trackBookInteraction({
+    required String bookId,
+    required String action,
+    Map<String, dynamic>? metadata,
+  }) async {
+    try {
+      await _analyticsService.trackBookInteraction(
+        bookId: bookId,
+        action: action,
+        metadata: metadata,
+      );
+    } catch (e) {
+      print('Error tracking book interaction: $e');
+    }
+  }
+
+  // Get reading time restrictions
+  Future<Map<String, dynamic>> getReadingTimeRestrictions(String userId) async {
+    return await _contentFilterService.getReadingTimeRestrictions(userId);
+  }
+
+  // Check if user has exceeded daily reading limit
+  Future<bool> hasExceededDailyLimit(String userId) async {
+    return await _contentFilterService.hasExceededDailyLimit(userId);
+  }
+
+  // Report inappropriate content
+  Future<void> reportInappropriateContent({
+    required String bookId,
+    required String reason,
+    required String description,
+  }) async {
+    await _contentFilterService.reportInappropriateContent(
+      bookId: bookId,
+      reason: reason,
+      description: description,
+    );
   }
 
   // Clear error
