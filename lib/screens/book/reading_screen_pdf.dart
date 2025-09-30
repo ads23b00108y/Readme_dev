@@ -65,6 +65,10 @@ class _ReadingScreenPDFState extends State<ReadingScreenPDF> {
   // Bookmarks
   final List<Map<String, dynamic>> _bookmarks = [];
   
+  // Table of Contents
+  bool _showTableOfContents = false;
+  List<PdfBookmark>? _pdfBookmarks;
+  
   // Text extraction cache
   final Map<int, String> _pageTextCache = {};
   
@@ -158,6 +162,11 @@ class _ReadingScreenPDFState extends State<ReadingScreenPDF> {
       // Load PDF document for text extraction
       final bytes = await File(path).readAsBytes();
       _pdfDocument = PdfDocument(inputBytes: bytes);
+      
+      // Extract table of contents if available
+      _pdfBookmarks = _pdfDocument!.bookmarks.count > 0 
+          ? _pdfDocument!.bookmarks 
+          : null;
       
       setState(() {
         _totalPages = _pdfDocument!.pages.count;
@@ -290,6 +299,33 @@ class _ReadingScreenPDFState extends State<ReadingScreenPDF> {
     _pdfViewerController.jumpToPage(pageIndex + 1);
   }
 
+  void _toggleTableOfContents() {
+    if (_pdfBookmarks == null || _pdfBookmarks!.count == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This PDF does not have a table of contents'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    
+    setState(() {
+      _showTableOfContents = !_showTableOfContents;
+    });
+  }
+
+  void _goToChapter(PdfBookmark bookmark) {
+    // Navigate to the page indicated by the bookmark
+    final pageNumber = bookmark.destination?.page ?? 0;
+    if (pageNumber > 0 && pageNumber <= _totalPages) {
+      _pdfViewerController.jumpToPage(pageNumber);
+      setState(() {
+        _showTableOfContents = false;
+      });
+    }
+  }
+
   Future<void> _updateReadingProgress() async {
     try {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -404,6 +440,101 @@ class _ReadingScreenPDFState extends State<ReadingScreenPDF> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) => _buildSettingsSheet(),
+    );
+  }
+
+  Widget _buildTableOfContents() {
+    if (_pdfBookmarks == null || _pdfBookmarks!.count == 0) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.menu_book, size: 64, color: Colors.grey),
+            const SizedBox(height: 20),
+            const Text(
+              'No table of contents available',
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  _showTableOfContents = false;
+                });
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF8E44AD),
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Back to Reading'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      color: const Color(0xFFFFFDF7),
+      child: Column(
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.1),
+                  spreadRadius: 1,
+                  blurRadius: 5,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                IconButton(
+                  onPressed: () {
+                    setState(() {
+                      _showTableOfContents = false;
+                    });
+                  },
+                  icon: const Icon(Icons.arrow_back, color: Color(0xFF8E44AD)),
+                ),
+                const Expanded(
+                  child: Text(
+                    'Table of Contents',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF8E44AD),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Chapters list
+          Expanded(
+            child: ListView.builder(
+              itemCount: _pdfBookmarks!.count,
+              itemBuilder: (context, index) {
+                final bookmark = _pdfBookmarks![index];
+                return ListTile(
+                  leading: const Icon(Icons.bookmark, color: Color(0xFF8E44AD)),
+                  title: Text(
+                    bookmark.title,
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+                  onTap: () => _goToChapter(bookmark),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -584,7 +715,9 @@ class _ReadingScreenPDFState extends State<ReadingScreenPDF> {
     return Scaffold(
       backgroundColor: const Color(0xFFFFFDF7),
       body: SafeArea(
-        child: Column(
+        child: _showTableOfContents 
+            ? _buildTableOfContents()
+            : Column(
           children: [
             // Header
             Container(
@@ -638,6 +771,12 @@ class _ReadingScreenPDFState extends State<ReadingScreenPDF> {
                         onPressed: _addBookmark,
                         icon: const Icon(Icons.bookmark_add, color: Color(0xFF8E44AD)),
                       ),
+                      if (_pdfBookmarks != null && _pdfBookmarks!.count > 0)
+                        IconButton(
+                          onPressed: _toggleTableOfContents,
+                          icon: const Icon(Icons.menu_book, color: Color(0xFF8E44AD)),
+                          tooltip: 'Table of Contents',
+                        ),
                       IconButton(
                         onPressed: _showSettings,
                         icon: const Icon(Icons.settings, color: Color(0xFF8E44AD)),
