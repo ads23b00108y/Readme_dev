@@ -210,12 +210,28 @@ class _ReadingScreenState extends State<ReadingScreen> {
     try {
       final file = File(pdfPath);
       if (!await file.exists()) {
-        throw Exception('PDF file not found');
+        throw Exception('PDF file not found at specified path');
       }
 
       // Load PDF document for text extraction
       final bytes = await file.readAsBytes();
-      _pdfDocument = PdfDocument(inputBytes: bytes);
+      
+      // Validate that it's a valid PDF
+      PdfDocument? tempDoc;
+      try {
+        tempDoc = PdfDocument(inputBytes: bytes);
+        
+        // Check if PDF has pages
+        if (tempDoc.pages.count == 0) {
+          tempDoc.dispose();
+          throw Exception('PDF file appears to be empty or corrupted');
+        }
+        
+        _pdfDocument = tempDoc;
+      } catch (e) {
+        tempDoc?.dispose();
+        throw Exception('Invalid or corrupted PDF file: ${e.toString()}');
+      }
       
       setState(() {
         _isPdfBook = true;
@@ -245,9 +261,13 @@ class _ReadingScreenState extends State<ReadingScreen> {
       }
     } catch (e) {
       setState(() {
-        _error = 'Failed to load PDF: $e';
+        _error = 'Failed to load PDF: ${e.toString().replaceFirst('Exception: ', '')}';
         _isLoading = false;
+        _isPdfBook = false;
+        _pdfPath = null;
       });
+      _pdfDocument?.dispose();
+      _pdfDocument = null;
     }
   }
 
@@ -294,10 +314,20 @@ class _ReadingScreenState extends State<ReadingScreen> {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf'],
+        withData: false,
+        withReadStream: false,
       );
 
       if (result != null && result.files.single.path != null) {
         final filePath = result.files.single.path!;
+        final fileName = result.files.single.name;
+        
+        // Validate file size (max 50MB for reasonable performance)
+        final file = File(filePath);
+        final fileSize = await file.length();
+        if (fileSize > 50 * 1024 * 1024) {
+          throw Exception('PDF file is too large. Maximum size is 50MB.');
+        }
         
         setState(() {
           _isLoading = true;
@@ -313,24 +343,42 @@ class _ReadingScreenState extends State<ReadingScreen> {
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('PDF uploaded successfully!'),
+            SnackBar(
+              content: Text('PDF "$fileName" uploaded successfully!'),
               backgroundColor: Colors.green,
             ),
           );
         }
       }
-    } catch (e) {
+    } on Exception catch (e) {
       print('Error uploading PDF: $e');
       setState(() {
         _isLoading = false;
+        _error = null; // Don't show permanent error, just a snackbar
       });
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error uploading PDF: $e'),
+            content: Text(e.toString().replaceFirst('Exception: ', '')),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Unexpected error uploading PDF: $e');
+      setState(() {
+        _isLoading = false;
+        _error = null;
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error uploading PDF: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
           ),
         );
       }
@@ -765,9 +813,25 @@ class _ReadingScreenState extends State<ReadingScreen> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Go Back'),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ElevatedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.grey,
+                      ),
+                      child: const Text('Go Back'),
+                    ),
+                    const SizedBox(width: 10),
+                    ElevatedButton(
+                      onPressed: _uploadPdfFile,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF8E44AD),
+                      ),
+                      child: const Text('Try Another PDF'),
+                    ),
+                  ],
                 ),
               ],
             ),
