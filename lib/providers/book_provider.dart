@@ -29,6 +29,8 @@ class Book {
   final String readingLevel; // NEW: 'Easy' | 'Medium' | 'Advanced'
   final int estimatedReadingHours; // NEW: For full books (in addition to minutes)
   final Map<String, dynamic>? gutenbergMetadata; // NEW: Project Gutenberg metadata
+  final String? pdfPath; // NEW: Local path to PDF file for PDF books
+  final bool isPdf; // NEW: Whether this is a PDF book
 
   Book({
     required this.id,
@@ -50,6 +52,8 @@ class Book {
     this.readingLevel = 'Easy', // NEW: Reading level
     this.estimatedReadingHours = 0, // NEW: Reading hours
     this.gutenbergMetadata,    // NEW: Gutenberg metadata
+    this.pdfPath,              // NEW: PDF file path
+    this.isPdf = false,        // NEW: PDF indicator
   });
 
   // Enhanced helper methods for cover display
@@ -187,6 +191,8 @@ class Book {
       readingLevel: data['readingLevel'] ?? 'Easy', // NEW: Reading level
       estimatedReadingHours: data['estimatedReadingHours'] ?? 0, // NEW: Reading hours
       gutenbergMetadata: data['gutenbergMetadata'] as Map<String, dynamic>?, // NEW: Gutenberg metadata
+      pdfPath: data['pdfPath'], // NEW: PDF file path
+      isPdf: data['isPdf'] ?? false, // NEW: PDF indicator
     );
   }
 
@@ -204,6 +210,15 @@ class Book {
       'chapters': chapters?.map((chapter) => chapter.toMap()).toList(), // NEW: Chapter structure
       'createdAt': Timestamp.fromDate(createdAt),
       'source': source, // Book source
+      'hasRealContent': hasRealContent, // Content authenticity
+      'contentType': contentType, // NEW: Content type
+      'wordCount': wordCount, // NEW: Word count
+      'readingLevel': readingLevel, // NEW: Reading level
+      'estimatedReadingHours': estimatedReadingHours, // NEW: Reading hours
+      'gutenbergMetadata': gutenbergMetadata, // NEW: Gutenberg metadata
+      'pdfPath': pdfPath, // NEW: PDF file path
+      'isPdf': isPdf, // NEW: PDF indicator
+    };
       'hasRealContent': hasRealContent, // Content authenticity
       'contentType': contentType, // NEW: Content type
       'wordCount': wordCount, // NEW: Word count
