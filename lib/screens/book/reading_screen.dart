@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
+import 'package:syncfusion_flutter_pdf/pdf.dart';
+import 'dart:io';
 import '../../providers/book_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/user_provider.dart';
@@ -40,6 +44,14 @@ class _ReadingScreenState extends State<ReadingScreen> {
   Map<String, int>? _currentChapterInfo;
   bool _hasChapters = false;
 
+  // NEW: PDF-related variables
+  bool _isPdfBook = false;
+  String? _pdfPath;
+  PdfViewerController? _pdfController;
+  PdfDocument? _pdfDocument;
+  String _currentPageText = '';
+  bool _isExtractingText = false;
+
   @override
   void initState() {
     super.initState();
@@ -62,6 +74,7 @@ class _ReadingScreenState extends State<ReadingScreen> {
   void dispose() {
     _flutterTts.stop();
     _updateReadingProgress();
+    _pdfDocument?.dispose();
     super.dispose();
   }
 
@@ -144,36 +157,42 @@ class _ReadingScreenState extends State<ReadingScreen> {
       final book = bookProvider.getBookById(widget.bookId);
       
       if (book != null) {
-        // Use new method that handles both chapters and legacy content
-        final content = book.getReadingContent();
-        
-        if (content.isNotEmpty) {
-          setState(() {
-            _bookContent = content;
-            _totalPages = book.totalPages;
-            _hasChapters = book.hasChapters;
-            _isLoading = false;
-          });
-          
-          // Load existing progress
-          final authProvider = Provider.of<AuthProvider>(context, listen: false);
-          if (authProvider.userId != null) {
-            final progress = bookProvider.getProgressForBook(widget.bookId);
-            if (progress != null) {
-              setState(() {
-                _currentPage = progress.currentPage - 1; // Convert to 0-based index
-                _readingProgress = progress.progressPercentage;
-              });
-            }
-          }
-          
-          // Update chapter info for current page
-          if (_hasChapters) {
-            _updateChapterInfo(book);
-          }
+        // Check if this is a PDF book
+        if (book.isPdf && book.pdfPath != null) {
+          await _loadPdfBook(book.pdfPath!);
         } else {
-          // Fallback content if no content found
-          _setFallbackContent();
+          // Use new method that handles both chapters and legacy content
+          final content = book.getReadingContent();
+          
+          if (content.isNotEmpty) {
+            setState(() {
+              _bookContent = content;
+              _totalPages = book.totalPages;
+              _hasChapters = book.hasChapters;
+              _isPdfBook = false;
+              _isLoading = false;
+            });
+            
+            // Load existing progress
+            final authProvider = Provider.of<AuthProvider>(context, listen: false);
+            if (authProvider.userId != null) {
+              final progress = bookProvider.getProgressForBook(widget.bookId);
+              if (progress != null) {
+                setState(() {
+                  _currentPage = progress.currentPage - 1; // Convert to 0-based index
+                  _readingProgress = progress.progressPercentage;
+                });
+              }
+            }
+            
+            // Update chapter info for current page
+            if (_hasChapters) {
+              _updateChapterInfo(book);
+            }
+          } else {
+            // Fallback content if no content found
+            _setFallbackContent();
+          }
         }
       } else {
         // Fallback content if book not found
@@ -183,6 +202,97 @@ class _ReadingScreenState extends State<ReadingScreen> {
       setState(() {
         _error = 'Failed to load book content: $e';
         _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadPdfBook(String pdfPath) async {
+    try {
+      final file = File(pdfPath);
+      if (!await file.exists()) {
+        throw Exception('PDF file not found at specified path');
+      }
+
+      // Load PDF document for text extraction
+      final bytes = await file.readAsBytes();
+      
+      // Validate that it's a valid PDF
+      PdfDocument? tempDoc;
+      try {
+        tempDoc = PdfDocument(inputBytes: bytes);
+        
+        // Check if PDF has pages
+        if (tempDoc.pages.count == 0) {
+          tempDoc.dispose();
+          throw Exception('PDF file appears to be empty or corrupted');
+        }
+        
+        _pdfDocument = tempDoc;
+      } catch (e) {
+        tempDoc?.dispose();
+        throw Exception('Invalid or corrupted PDF file: ${e.toString()}');
+      }
+      
+      setState(() {
+        _isPdfBook = true;
+        _pdfPath = pdfPath;
+        _pdfController = PdfViewerController();
+        _totalPages = _pdfDocument!.pages.count;
+        _currentPage = 0;
+        _isLoading = false;
+      });
+
+      // Extract text from first page
+      await _extractTextFromCurrentPage();
+
+      // Load existing progress
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final bookProvider = Provider.of<BookProvider>(context, listen: false);
+      if (authProvider.userId != null) {
+        final progress = bookProvider.getProgressForBook(widget.bookId);
+        if (progress != null && progress.currentPage > 0) {
+          setState(() {
+            _currentPage = progress.currentPage - 1;
+            _readingProgress = progress.progressPercentage;
+          });
+          _pdfController?.jumpToPage(progress.currentPage);
+          await _extractTextFromCurrentPage();
+        }
+      }
+    } catch (e) {
+      setState(() {
+        _error = 'Failed to load PDF: ${e.toString().replaceFirst('Exception: ', '')}';
+        _isLoading = false;
+        _isPdfBook = false;
+        _pdfPath = null;
+      });
+      _pdfDocument?.dispose();
+      _pdfDocument = null;
+    }
+  }
+
+  Future<void> _extractTextFromCurrentPage() async {
+    if (_pdfDocument == null || _isExtractingText) return;
+    
+    setState(() {
+      _isExtractingText = true;
+    });
+
+    try {
+      final page = _pdfDocument!.pages[_currentPage];
+      final extractedText = PdfTextExtractor(_pdfDocument!).extractText(startPageIndex: _currentPage, endPageIndex: _currentPage);
+      
+      setState(() {
+        _currentPageText = extractedText.isNotEmpty 
+            ? extractedText 
+            : 'No text could be extracted from this page.';
+        _isExtractingText = false;
+      });
+    } catch (e) {
+      print('Error extracting text: $e');
+      setState(() {
+        _currentPageText = 'Unable to extract text for TTS on this page.';
+        _isExtractingText = false;
       });
     }
   }
@@ -197,6 +307,82 @@ class _ReadingScreenState extends State<ReadingScreen> {
       _totalPages = _bookContent.length;
       _isLoading = false;
     });
+  }
+
+  Future<void> _uploadPdfFile() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+        withData: false,
+        withReadStream: false,
+      );
+
+      if (result != null && result.files.single.path != null) {
+        final filePath = result.files.single.path!;
+        final fileName = result.files.single.name;
+        
+        // Validate file size (max 50MB for reasonable performance)
+        final file = File(filePath);
+        final fileSize = await file.length();
+        if (fileSize > 50 * 1024 * 1024) {
+          throw Exception('PDF file is too large. Maximum size is 50MB.');
+        }
+        
+        setState(() {
+          _isLoading = true;
+        });
+
+        // Load the PDF
+        await _loadPdfBook(filePath);
+        
+        // Update the book in provider with PDF path
+        final bookProvider = Provider.of<BookProvider>(context, listen: false);
+        // Note: In a real implementation, you'd save this to the database
+        // For now, we just load it temporarily for this session
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('PDF "$fileName" uploaded successfully!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+    } on Exception catch (e) {
+      print('Error uploading PDF: $e');
+      setState(() {
+        _isLoading = false;
+        _error = null; // Don't show permanent error, just a snackbar
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceFirst('Exception: ', '')),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Unexpected error uploading PDF: $e');
+      setState(() {
+        _isLoading = false;
+        _error = null;
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error uploading PDF: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _togglePlayPause() async {
@@ -217,15 +403,34 @@ class _ReadingScreenState extends State<ReadingScreen> {
           _isPlaying = false;
         });
       } else {
-        if (_currentPage < _bookContent.length) {
-          await _flutterTts.speak(_bookContent[_currentPage]);
-          setState(() {
-            _isPlaying = true;
-          });
+        String textToSpeak;
+        
+        if (_isPdfBook) {
+          // For PDF books, speak the extracted text from current page
+          if (_currentPageText.isEmpty || _isExtractingText) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Extracting text from page, please wait...'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+            return;
+          }
+          textToSpeak = _currentPageText;
         } else {
-          // If we're beyond the content, show completion
-          await _completeBook();
+          // For regular books, speak the current page content
+          if (_currentPage < _bookContent.length) {
+            textToSpeak = _bookContent[_currentPage];
+          } else {
+            await _completeBook();
+            return;
+          }
         }
+        
+        await _flutterTts.speak(textToSpeak);
+        setState(() {
+          _isPlaying = true;
+        });
       }
     } catch (e) {
       print('TTS Error in _togglePlayPause: $e');
@@ -258,8 +463,13 @@ class _ReadingScreenState extends State<ReadingScreen> {
         _isPlaying = false;
       });
       
+      if (_isPdfBook) {
+        _pdfController?.jumpToPage(_currentPage + 1);
+        await _extractTextFromCurrentPage();
+      }
+      
       // Update chapter info if this is a chapter-based book
-      if (_hasChapters) {
+      if (_hasChapters && !_isPdfBook) {
         final bookProvider = Provider.of<BookProvider>(context, listen: false);
         final book = bookProvider.getBookById(widget.bookId);
         if (book != null) {
@@ -283,8 +493,13 @@ class _ReadingScreenState extends State<ReadingScreen> {
         _isPlaying = false;
       });
       
+      if (_isPdfBook) {
+        _pdfController?.jumpToPage(_currentPage + 1);
+        await _extractTextFromCurrentPage();
+      }
+      
       // Update chapter info if this is a chapter-based book
-      if (_hasChapters) {
+      if (_hasChapters && !_isPdfBook) {
         final bookProvider = Provider.of<BookProvider>(context, listen: false);
         final book = bookProvider.getBookById(widget.bookId);
         if (book != null) {
@@ -598,9 +813,25 @@ class _ReadingScreenState extends State<ReadingScreen> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Go Back'),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ElevatedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.grey,
+                      ),
+                      child: const Text('Go Back'),
+                    ),
+                    const SizedBox(width: 10),
+                    ElevatedButton(
+                      onPressed: _uploadPdfFile,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF8E44AD),
+                      ),
+                      child: const Text('Try Another PDF'),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -679,6 +910,16 @@ class _ReadingScreenState extends State<ReadingScreen> {
                           color: Color(0xFF8E44AD),
                         ),
                       ),
+                      // PDF Upload button
+                      if (!_isPdfBook)
+                        IconButton(
+                          onPressed: _uploadPdfFile,
+                          icon: const Icon(
+                            Icons.upload_file,
+                            color: Color(0xFF8E44AD),
+                          ),
+                          tooltip: 'Upload PDF',
+                        ),
                     ],
                   ),
                   
@@ -725,11 +966,11 @@ class _ReadingScreenState extends State<ReadingScreen> {
                 padding: const EdgeInsets.all(20.0),
                 child: Column(
                   children: [
-                    // Text content
+                    // Content (either PDF or Text)
                     Expanded(
                       child: Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.all(20),
+                        padding: _isPdfBook ? EdgeInsets.zero : const EdgeInsets.all(20),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(15),
@@ -742,17 +983,33 @@ class _ReadingScreenState extends State<ReadingScreen> {
                             ),
                           ],
                         ),
-                        child: SingleChildScrollView(
-                          child: Text(
-                            pageContent,
-                            style: TextStyle(
-                              fontSize: _fontSize,
-                              height: 1.8,
-                              color: Colors.black87,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ),
+                        child: _isPdfBook && _pdfPath != null
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(15),
+                                child: SfPdfViewer.file(
+                                  File(_pdfPath!),
+                                  controller: _pdfController,
+                                  onPageChanged: (PdfPageChangedDetails details) {
+                                    setState(() {
+                                      _currentPage = details.newPageNumber - 1;
+                                      _readingProgress = (_currentPage + 1) / _totalPages;
+                                    });
+                                    _extractTextFromCurrentPage();
+                                    _updateReadingProgress();
+                                  },
+                                ),
+                              )
+                            : SingleChildScrollView(
+                                child: Text(
+                                  pageContent,
+                                  style: TextStyle(
+                                    fontSize: _fontSize,
+                                    height: 1.8,
+                                    color: Colors.black87,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
                       ),
                     ),
                     

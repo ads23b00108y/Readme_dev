@@ -42,6 +42,12 @@ dependencies:
   # Utilities
   intl: ^0.18.1
 
+  # PDF Support
+  file_picker: ^6.1.1
+  syncfusion_flutter_pdfviewer: ^24.1.41
+  syncfusion_flutter_pdf: ^24.1.41
+  path_provider: ^2.1.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
