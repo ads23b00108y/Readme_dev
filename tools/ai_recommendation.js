@@ -3,7 +3,7 @@
 // References: book_interactions, reading_progress, reading_sessions, quiz_analytics, books
 
 const admin = require('firebase-admin');
-const { Configuration, OpenAIApi } = require('openai');
+const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 const serviceAccount = require('./serviceAccountKey.json');
 
 admin.initializeApp({
@@ -12,8 +12,7 @@ admin.initializeApp({
 const db = admin.firestore();
 
 // --- CONFIGURE YOUR OPENAI API KEY ---
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '<YOUR_OPENAI_API_KEY>';
-const openai = new OpenAIApi(new Configuration({ apiKey: OPENAI_API_KEY }));
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 // Helper: Get book metadata (traits, tags) by bookId
 async function getBookMetadata(bookId) {
@@ -101,22 +100,79 @@ async function aggregateUserSignals(userId) {
   return { topTraits, topTags };
 }
 
-// Example: Recommend books using OpenAI
+// Get book recommendations using OpenAI
 async function recommendBooksForUser(userId) {
   const { topTraits, topTags } = await aggregateUserSignals(userId);
-  // You can now use topTraits/topTags in your OpenAI prompt
-  // ...
-  console.log('User profile:', { topTraits, topTags });
-  // Example OpenAI prompt (customize as needed)
-  /*
-  const prompt = `Recommend children's books for a user with these traits: ${topTraits.join(', ')} and interests: ${topTags.join(', ')}.`;
-  const response = await openai.createCompletion({
-    model: 'gpt-3.5-turbo',
-    prompt,
-    max_tokens: 200,
-  });
-  console.log('AI Recommendations:', response.data.choices[0].text);
-  */
+  
+  // Get available books from Firestore
+  const booksSnap = await db.collection('books').get();
+  const availableBooks = booksSnap.docs.map(doc => ({
+    id: doc.id,
+    title: doc.data().title,
+    author: doc.data().author,
+    description: doc.data().description,
+    tags: doc.data().tags || [],
+    traits: doc.data().traits || [],
+    ageRating: doc.data().ageRating
+  }));
+
+  const allowedTags = [
+    'adventure', 'fantasy', 'friendship', 'animals', 'family', 'learning', 'kindness', 'creativity', 'imagination'
+  ];
+  const allowedTraits = [
+    'adventurous', 'curious', 'imaginative', 'creative', 'kind', 'brave', 'friendly', 'thoughtful', 'social', 'caring'
+  ];
+
+  const prompt = `You are an expert children's librarian specializing in personalized book recommendations.
+
+User Profile:
+- Preferred traits: ${topTraits.join(', ')}
+- Interested in topics: ${topTags.join(', ')}
+
+Available Books:
+${availableBooks.map(book => `- "${book.title}" by ${book.author} (Age: ${book.ageRating}) - Tags: [${book.tags.join(', ')}], Traits: [${book.traits.join(', ')}] - ${book.description}`).join('\n')}
+
+Instructions:
+1. Recommend 3-5 books from the available list that best match the user's traits and interests
+2. Prioritize books that align with the user's preferred traits: ${topTraits.join(', ')}
+3. Consider books with relevant tags: ${topTags.join(', ')}
+4. Only recommend books from the provided list
+5. Order recommendations by relevance (best match first)
+
+Return ONLY a valid JSON array of book IDs in order of recommendation:
+Example: ["bookId1", "bookId2", "bookId3"]`;
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'gpt-4',
+        messages: [
+          { role: 'system', content: 'You are an expert children\'s book recommendation specialist.' },
+          { role: 'user', content: prompt }
+        ]
+      })
+    });
+    
+    const data = await response.json();
+    const match = data.choices[0].message.content.match(/\[[\s\S]*\]/);
+    if (match) {
+      const recommendedIds = JSON.parse(match[0]);
+      const recommendedBooks = recommendedIds.map(id => availableBooks.find(book => book.id === id)).filter(Boolean);
+      console.log('AI Recommendations for user:', userId);
+      console.log('User profile:', { topTraits, topTags });
+      console.log('Recommended books:', recommendedBooks.map(book => `${book.title} by ${book.author}`));
+      return recommendedBooks;
+    }
+  } catch (error) {
+    console.error('Error getting AI recommendations:', error);
+  }
+  
+  return [];
 }
 
 // Usage example

@@ -43,8 +43,28 @@ async function getTagsTraitsFromAI(text, title, author, description) {
   const allowedTraits = [
     'adventurous', 'curious', 'imaginative', 'creative', 'kind', 'brave', 'friendly', 'thoughtful', 'social', 'caring'
   ];
-  const allowedAges = ['6+', '7+', '8+', '9+', '10+', '11+', '12+'];
-  const prompt = `Title: ${title}\nAuthor: ${author}\nDescription: ${description}\nContent: ${text}\nSuggest relevant tags, traits, and an age rating for this children's book. Only use tags from this list: ${allowedTags.join(", ")}. Only use traits from this list: ${allowedTraits.join(", ")}. Only use age ratings from this list: ${allowedAges.join(", ")}. Return JSON with 'tags', 'traits', and 'ageRating' fields.`;
+  const allowedAges = ['6+', '7+', '8+', '9+', '10+'];
+  const prompt = `You are an expert children's librarian and educational content specialist. Analyze this children's book and provide accurate metadata.
+
+Book Information:
+Title: ${title}
+Author: ${author}
+Description: ${description}
+Content Sample: ${text}
+
+Instructions:
+1. TAGS: Select 2-4 most relevant themes/topics from this list only: ${allowedTags.join(", ")}
+2. TRAITS: Choose 2-3 personality traits that would appeal to children with similar characteristics from this list only: ${allowedTraits.join(", ")}
+3. AGE RATING: Determine the most appropriate age rating based on vocabulary complexity, sentence structure, themes, and content difficulty from this list only: ${allowedAges.join(", ")}
+
+Consider:
+- Reading level (simple vs complex vocabulary and sentences)
+- Emotional maturity needed for themes
+- Attention span required
+- Educational value and concepts presented
+
+Return ONLY a valid JSON object with exactly these fields: 'tags', 'traits', 'ageRating'
+Example: {"tags": ["adventure", "friendship"], "traits": ["brave", "curious"], "ageRating": "7+"}`;
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -68,9 +88,10 @@ async function getTagsTraitsFromAI(text, title, author, description) {
   return { tags: [], traits: [], ageRating: '' };
 }
 
-async function updateBookTagsTraits(bookId, tags, traits, ageRating) {
+async function updateBookTagsTraits(bookId, tags, traits, ageRating, existingAgeRating) {
   const updateData = { tags, traits, needsTagging: false };
-  if (ageRating && ageRating.length > 0) {
+  // Only update age rating if book doesn't already have one
+  if (ageRating && ageRating.length > 0 && (!existingAgeRating || existingAgeRating.length === 0)) {
     updateData.ageRating = ageRating;
   }
   await db.collection('books').doc(bookId).update(updateData);
@@ -82,8 +103,8 @@ async function main() {
     const localPdfPath = path.join(__dirname, `${book.id}.pdf`);
     await downloadPdf(book.pdfUrl, localPdfPath);
     const text = await extractTextFromPdf(localPdfPath);
-  const aiResult = await getTagsTraitsFromAI(text, book.title, book.author, book.description);
-  await updateBookTagsTraits(book.id, aiResult.tags, aiResult.traits, aiResult.ageRating);
+    const aiResult = await getTagsTraitsFromAI(text, book.title, book.author, book.description);
+    await updateBookTagsTraits(book.id, aiResult.tags, aiResult.traits, aiResult.ageRating, book.ageRating);
     fs.unlinkSync(localPdfPath); // Clean up
     console.log(`Updated book ${book.title} with tags/traits.`);
   }
