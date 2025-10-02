@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'reading_screen.dart';
+import 'pdf_reading_screen.dart';
 import '../../providers/book_provider.dart';
 import '../../providers/auth_provider.dart';
 
@@ -200,9 +201,9 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
                             ),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(20),
-                              child: book != null && book!.hasRealCover
+                              child: book != null && book.hasRealCover
                                   ? CachedNetworkImage(
-                                      imageUrl: book!.coverImageUrl!,
+                                      imageUrl: book.coverImageUrl!,
                                       width: 200,
                                       height: 280,
                                       fit: BoxFit.cover,
