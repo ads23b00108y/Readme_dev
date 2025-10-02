@@ -30,6 +30,11 @@ dependencies:
   # Text-to-Speech
   flutter_tts: ^3.8.5
 
+  # PDF Viewer & Text Extraction
+  syncfusion_flutter_pdfviewer: ^24.1.41
+  syncfusion_flutter_pdf: ^24.1.41
+  file_picker: ^6.1.1
+
   # Image Loading & Caching
   cached_network_image: ^3.3.0
 

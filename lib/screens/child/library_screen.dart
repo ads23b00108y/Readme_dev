@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../book/book_details_screen.dart';
+import '../book/reading_screen_pdf.dart';
 import '../../providers/book_provider.dart';
 import '../../providers/auth_provider.dart';
 import 'settings_screen.dart';
@@ -183,6 +184,24 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
               ),
             ),
           ],
+        ),
+      ),
+      
+      // Floating action button for PDF reading
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ReadingScreenPDF(),
+            ),
+          );
+        },
+        backgroundColor: const Color(0xFF8E44AD),
+        icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
+        label: const Text(
+          'Read PDF',
+          style: TextStyle(color: Colors.white),
         ),
       ),
       

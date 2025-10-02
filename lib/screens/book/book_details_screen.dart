@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'reading_screen.dart';
+import 'reading_screen_pdf.dart';
 import '../../providers/book_provider.dart';
 import '../../providers/auth_provider.dart';
 
@@ -392,7 +393,7 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
               ),
               child: Row(
                 children: [
-                  // Preview button
+                  // PDF Reading button
                   Expanded(
                     flex: 1,
                     child: OutlinedButton(
@@ -404,20 +405,35 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
                       onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Preview coming soon! 👀'),
-                            backgroundColor: Color(0xFF8E44AD),
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ReadingScreenPDF(
+                              bookId: widget.bookId,
+                              title: displayTitle,
+                              author: displayAuthor,
+                            ),
                           ),
                         );
                       },
-                      child: const Text(
-                        'Preview',
-                        style: TextStyle(
-                          color: Color(0xFF8E44AD),
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.picture_as_pdf,
+                            color: Color(0xFF8E44AD),
+                            size: 20,
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            'PDF',
+                            style: TextStyle(
+                              color: Color(0xFF8E44AD),
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
