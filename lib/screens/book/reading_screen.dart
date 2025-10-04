@@ -245,14 +245,17 @@ class _ReadingScreenState extends State<ReadingScreen> {
   }
 
   Future<void> _nextPage() async {
+    try {
+      await _flutterTts.stop(); // Always stop TTS before page change
+    } catch (e) {
+      print('TTS stop error: $e');
+    }
     if (_currentPage < _totalPages - 1) {
-      await _flutterTts.stop();
       setState(() {
         _currentPage++;
         _readingProgress = (_currentPage + 1) / _totalPages;
         _isPlaying = false;
       });
-      
       // Update chapter info if this is a chapter-based book
       if (_hasChapters) {
         final bookProvider = Provider.of<BookProvider>(context, listen: false);
@@ -261,7 +264,6 @@ class _ReadingScreenState extends State<ReadingScreen> {
           _updateChapterInfo(book);
         }
       }
-      
       await _updateReadingProgress();
     } else if (_currentPage == _totalPages - 1) {
       // Book completed!
@@ -270,14 +272,17 @@ class _ReadingScreenState extends State<ReadingScreen> {
   }
 
   Future<void> _previousPage() async {
+    try {
+      await _flutterTts.stop(); // Always stop TTS before page change
+    } catch (e) {
+      print('TTS stop error: $e');
+    }
     if (_currentPage > 0) {
-      await _flutterTts.stop();
       setState(() {
         _currentPage--;
         _readingProgress = (_currentPage + 1) / _totalPages;
         _isPlaying = false;
       });
-      
       // Update chapter info if this is a chapter-based book
       if (_hasChapters) {
         final bookProvider = Provider.of<BookProvider>(context, listen: false);
@@ -286,7 +291,6 @@ class _ReadingScreenState extends State<ReadingScreen> {
           _updateChapterInfo(book);
         }
       }
-      
       await _updateReadingProgress();
     }
   }
@@ -344,11 +348,11 @@ class _ReadingScreenState extends State<ReadingScreen> {
                 const SnackBar(
                   content: Row(
                     children: [
-                      Text('🏆', style: TextStyle(fontSize: 20)),
+                      Text('Yay!', style: TextStyle(fontSize: 20)),
                       SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'Achievement Unlocked: First Book Complete!',
+                          'Achievement Unlocked: First Book Complete',
                           style: TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ),
@@ -366,15 +370,9 @@ class _ReadingScreenState extends State<ReadingScreen> {
         }
       }
 
-      // No congratulations dialog; just return to library
+      // Show completion dialog
       if (mounted) {
-        Navigator.of(context).pop(); // Close reading screen
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const LibraryScreen(),
-          ),
-        );
+        _showCompletionDialog();
       }
     } catch (e) {
       print('Error completing book: $e');
@@ -401,12 +399,12 @@ class _ReadingScreenState extends State<ReadingScreen> {
           title: const Column(
             children: [
               Text(
-                '🎉',
+                'Book',
                 style: TextStyle(fontSize: 50),
               ),
               SizedBox(height: 10),
               Text(
-                'Congratulations!',
+                'Completed!',
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -503,7 +501,7 @@ class _ReadingScreenState extends State<ReadingScreen> {
           ),
           const SizedBox(height: 20),
           
-          // Font size slider (no zoom percentage)
+          // Font size slider
           Row(
             children: [
               const Text('Font Size:', style: TextStyle(fontSize: 16)),
@@ -521,6 +519,7 @@ class _ReadingScreenState extends State<ReadingScreen> {
                   },
                 ),
               ),
+              Text('${_fontSize.round()}'),
             ],
           ),
           
@@ -559,47 +558,47 @@ class _ReadingScreenState extends State<ReadingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(
-        backgroundColor: Color(0xFFFFFDF7),
-        body: Center(
-          child: CircularProgressIndicator(
-            color: Color(0xFF8E44AD),
-          ),
+    if (!_isTtsInitialized) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Text-to-speech is not available'),
+          backgroundColor: Colors.orange,
         ),
       );
+      return;
     }
-
-    if (_error != null) {
-      return Scaffold(
-        backgroundColor: const Color(0xFFFFFDF7),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text(
-                  '😔',
-                  style: TextStyle(fontSize: 60),
-                ),
-                const SizedBox(height: 20),
-                const Text(
-                  'Error loading book',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  _error!,
-                  style: const TextStyle(color: Colors.grey),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
+    try {
+      if (_isPlaying) {
+        await _flutterTts.stop();
+        setState(() {
+          _isPlaying = false;
+        });
+      } else {
+        if (_currentPage < _bookContent.length) {
+          await _flutterTts.stop(); // Ensure TTS is stopped before starting
+          await _flutterTts.speak(_bookContent[_currentPage]);
+          setState(() {
+            _isPlaying = true;
+          });
+        } else {
+          // If we're beyond the content, show completion
+          await _completeBook();
+        }
+      }
+    } catch (e) {
+      print('TTS Error in _togglePlayPause: $e');
+      if (mounted) {
+        setState(() {
+          _isPlaying = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('TTS Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
                   child: const Text('Go Back'),
                 ),
               ],
@@ -611,9 +610,9 @@ class _ReadingScreenState extends State<ReadingScreen> {
 
     final bookProvider = Provider.of<BookProvider>(context, listen: false);
     final book = bookProvider.getBookById(widget.bookId);
-  final pageContent = _currentPage < _bookContent.length 
-    ? _bookContent[_currentPage]
-    : "The End";
+    final pageContent = _currentPage < _bookContent.length 
+        ? _bookContent[_currentPage]
+        : "The End\n\nCongratulations! You've finished reading \"${widget.title}\"!\n\n🎉📚✨";
     // Chapter/page info
     int chapterNum = 0;
     int pageInChapter = 0;
