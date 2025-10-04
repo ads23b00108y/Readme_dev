@@ -23,6 +23,8 @@ class ReadingScreen extends StatefulWidget {
 }
 
 class _ReadingScreenState extends State<ReadingScreen> {
+  List<dynamic> _availableVoices = [];
+  String? _selectedVoice;
   late FlutterTts _flutterTts;
   double _fontSize = 18.0;
   bool _isPlaying = false;
@@ -68,6 +70,18 @@ class _ReadingScreenState extends State<ReadingScreen> {
       await _flutterTts.setSpeechRate(_ttsSpeed);
       await _flutterTts.setVolume(1.0);
       await _flutterTts.setPitch(1.0);
+      // Get available voices
+      try {
+        final voices = await _flutterTts.getVoices;
+        setState(() {
+          _availableVoices = voices ?? [];
+          if (_availableVoices.isNotEmpty) {
+            _selectedVoice = _availableVoices.first['name'];
+          }
+        });
+      } catch (e) {
+        print('Error loading TTS voices: $e');
+      }
       
       // Set up completion handler with auto-progression
       _flutterTts.setCompletionHandler(() async {
@@ -212,6 +226,9 @@ class _ReadingScreenState extends State<ReadingScreen> {
         });
       } else {
         if (_currentPage < _bookContent.length) {
+          if (_selectedVoice != null) {
+            await _flutterTts.setVoice({'name': _selectedVoice});
+          }
           await _flutterTts.speak(_bookContent[_currentPage]);
           setState(() {
             _isPlaying = true;
@@ -549,7 +566,35 @@ class _ReadingScreenState extends State<ReadingScreen> {
               Text('${_ttsSpeed.toStringAsFixed(1)}x'),
             ],
           ),
-          
+          const SizedBox(height: 20),
+          // TTS Voice selection
+          if (_availableVoices.isNotEmpty)
+            Row(
+              children: [
+                const Text('Voice:', style: TextStyle(fontSize: 16)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: DropdownButton<String>(
+                    value: _selectedVoice,
+                    isExpanded: true,
+                    items: _availableVoices.map<DropdownMenuItem<String>>((voice) {
+                      return DropdownMenuItem<String>(
+                        value: voice['name'],
+                        child: Text(voice['name'] ?? 'Unknown'),
+                      );
+                    }).toList(),
+                    onChanged: (value) async {
+                      setState(() {
+                        _selectedVoice = value;
+                      });
+                      if (_isTtsInitialized && _selectedVoice != null) {
+                        await _flutterTts.setVoice({'name': _selectedVoice});
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
           const SizedBox(height: 20),
         ],
       ),
