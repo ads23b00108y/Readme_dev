@@ -366,9 +366,15 @@ class _ReadingScreenState extends State<ReadingScreen> {
         }
       }
 
-      // Show completion dialog
+      // No congratulations dialog; just return to library
       if (mounted) {
-        _showCompletionDialog();
+        Navigator.of(context).pop(); // Close reading screen
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const LibraryScreen(),
+          ),
+        );
       }
     } catch (e) {
       print('Error completing book: $e');
@@ -497,7 +503,7 @@ class _ReadingScreenState extends State<ReadingScreen> {
           ),
           const SizedBox(height: 20),
           
-          // Font size slider
+          // Font size slider (no zoom percentage)
           Row(
             children: [
               const Text('Font Size:', style: TextStyle(fontSize: 16)),
@@ -515,7 +521,6 @@ class _ReadingScreenState extends State<ReadingScreen> {
                   },
                 ),
               ),
-              Text('${_fontSize.round()}'),
             ],
           ),
           
@@ -606,9 +611,9 @@ class _ReadingScreenState extends State<ReadingScreen> {
 
     final bookProvider = Provider.of<BookProvider>(context, listen: false);
     final book = bookProvider.getBookById(widget.bookId);
-    final pageContent = _currentPage < _bookContent.length 
-        ? _bookContent[_currentPage]
-        : "The End\n\nCongratulations! You've finished reading \"${widget.title}\"!\n\n🎉📚✨";
+  final pageContent = _currentPage < _bookContent.length 
+    ? _bookContent[_currentPage]
+    : "The End";
     // Chapter/page info
     int chapterNum = 0;
     int pageInChapter = 0;
