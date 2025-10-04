@@ -23,7 +23,8 @@ try {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
     projectId: 'readme-40267',
-    storageBucket: 'readme-40267.firebasestorage.app'
+    storageBucket: 'readme-40267.firebasestorage.app',
+    databaseURL: 'https://readme-40267-default-rtdb.firebaseio.com'
   });
   
   db = admin.firestore();
