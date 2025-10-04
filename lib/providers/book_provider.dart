@@ -6,6 +6,7 @@ import '../services/analytics_service.dart';
 import '../services/achievement_service.dart';
 import '../services/content_filter_service.dart';
 import '../models/chapter.dart';
+import 'user_provider.dart';
 
 class Book {
   final String id;
