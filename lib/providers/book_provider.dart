@@ -602,6 +602,7 @@ class BookProvider extends ChangeNotifier {
 
   // Update reading progress with enhanced tracking
   Future<void> updateReadingProgress({
+    required BuildContext context,
     required String userId,
     required String bookId,
     required int currentPage,
@@ -679,9 +680,9 @@ class BookProvider extends ChangeNotifier {
 
       // Reload user progress and trigger user stats update
       await loadUserProgress(userId);
-      // Also trigger user stats update for streaks and minutes
+      // Also trigger user stats update for streaks and minutes using Provider
       try {
-        final userProvider = UserProvider();
+        final userProvider = Provider.of<UserProvider>(context, listen: false);
         await userProvider.loadUserData(userId);
       } catch (e) {
         print('Error updating user stats after reading progress: $e');

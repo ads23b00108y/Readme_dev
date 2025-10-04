@@ -300,6 +300,7 @@ class _ReadingScreenState extends State<ReadingScreen> {
         final sessionDuration = DateTime.now().difference(_sessionStart!).inMinutes;
         
         await bookProvider.updateReadingProgress(
+          context: context,
           userId: authProvider.userId!,
           bookId: widget.bookId,
           currentPage: _currentPage + 1, // Convert back to 1-based index
@@ -324,6 +325,7 @@ class _ReadingScreenState extends State<ReadingScreen> {
       if (authProvider.userId != null) {
         // Mark book as completed in the provider
         await bookProvider.updateReadingProgress(
+          context: context,
           userId: authProvider.userId!,
           bookId: widget.bookId,
           currentPage: _totalPages,
