@@ -120,7 +120,7 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.white,
       body: SafeArea(
         child: Consumer3<AuthProvider, BookProvider, UserProvider>(
           builder: (context, authProvider, bookProvider, userProvider, child) {
@@ -157,7 +157,7 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
                                 'Welcome back,',
                                 style: TextStyle(
                                   fontSize: 16,
-                                  color: Colors.grey,
+                                  color: AppTheme.textGray,
                                 ),
                               ),
                               Text(
@@ -165,7 +165,7 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
                                 style: const TextStyle(
                                   fontSize: 24,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.black,
+                                  color: AppTheme.black,
                                 ),
                               ),
                             ],

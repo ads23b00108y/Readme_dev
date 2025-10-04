@@ -200,7 +200,7 @@ class _ReadingScreenState extends State<ReadingScreen> {
       _bookContent = [
         "Welcome to ${widget.title}!\n\nThis is a sample story to demonstrate the reading experience.\n\nOnce upon a time, in a magical world filled with wonder and adventure...",
         "The story continues with exciting adventures and valuable lessons.\n\nOur heroes face challenges that teach them about courage, friendship, and perseverance.",
-        "And they all lived happily ever after!\n\nThe End.\n\n🎉 Congratulations on completing this story! 📚✨"
+        "And they all lived happily ever after!\n\nThe End.\n\nCongratulations on completing this story!"
       ];
       _totalPages = _bookContent.length;
       _isLoading = false;
@@ -444,7 +444,7 @@ class _ReadingScreenState extends State<ReadingScreen> {
               ),
               const SizedBox(height: 15),
               const Text(
-                'Great job on finishing another book! 📚✨',
+                'Great job on finishing another book!',
                 style: TextStyle(
                   fontSize: 14,
                   color: Colors.grey,
@@ -655,9 +655,9 @@ class _ReadingScreenState extends State<ReadingScreen> {
 
     final bookProvider = Provider.of<BookProvider>(context, listen: false);
     final book = bookProvider.getBookById(widget.bookId);
-    final pageContent = _currentPage < _bookContent.length 
-        ? _bookContent[_currentPage]
-        : "The End\n\nCongratulations! You've finished reading \"${widget.title}\"!\n\n🎉📚✨";
+  final pageContent = _currentPage < _bookContent.length 
+    ? _bookContent[_currentPage]
+    : "The End\n\nCongratulations! You've finished reading \"${widget.title}\"!";
     // Chapter/page info
     int chapterNum = 0;
     int pageInChapter = 0;
