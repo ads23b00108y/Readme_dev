@@ -677,8 +677,15 @@ class BookProvider extends ChangeNotifier {
       // Check and unlock achievements
       await _checkAchievements(userId);
 
-      // Reload user progress
+      // Reload user progress and trigger user stats update
       await loadUserProgress(userId);
+      // Also trigger user stats update for streaks and minutes
+      try {
+        final userProvider = UserProvider();
+        await userProvider.loadUserData(userId);
+      } catch (e) {
+        print('Error updating user stats after reading progress: $e');
+      }
     } catch (e) {
       print('Error updating reading progress: $e');
     }
