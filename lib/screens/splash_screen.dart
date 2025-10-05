@@ -6,6 +6,7 @@ import '../providers/auth_provider.dart';
 import '../providers/book_provider.dart';
 import '../providers/user_provider.dart';
 import '../screens/child/child_home_screen.dart';
+import '../theme/app_theme.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});

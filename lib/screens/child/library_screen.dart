@@ -5,6 +5,7 @@ import '../book/book_details_screen.dart';
 import '../../providers/book_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/user_provider.dart';
+import '../../theme/app_theme.dart';
 import 'settings_screen.dart';
 
 class LibraryScreen extends StatefulWidget {

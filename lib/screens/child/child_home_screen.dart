@@ -6,6 +6,7 @@ import '../quiz/quiz_screen.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/book_provider.dart';
 import '../../providers/user_provider.dart';
+import '../../theme/app_theme.dart';
 import 'library_screen.dart';
 import 'settings_screen.dart';
 
