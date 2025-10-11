@@ -77,17 +77,6 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
     }
   }
 
-  @override
-  void dispose() {
-    // Remove listener to avoid memory leaks
-    try {
-      final userProvider = Provider.of<UserProvider>(context, listen: false);
-      userProvider.removeListener(_checkShowBooksReadPopup);
-    } catch (_) {}
-    _tabController.dispose();
-    _searchController.dispose();
-    super.dispose();
-  }
 
   void _checkShowBooksReadPopup() {
     if (!mounted) return;
@@ -101,7 +90,7 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
         // Show congratulatory SnackBar
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Congratulations! You have read $booksRead books!'),
+            content: Text('Congratulations! You have completed $booksRead books!'),
             backgroundColor: Colors.deepPurple,
             duration: const Duration(seconds: 3),
           ),

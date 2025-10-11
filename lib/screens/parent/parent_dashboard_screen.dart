@@ -5,6 +5,7 @@ import 'reading_history_screen.dart';
 import 'set_goals_screen.dart';
 import '../../services/api_service.dart';
 import '../../services/analytics_service.dart';
+import '../../services/content_filter_service.dart';
 
 class ParentDashboardScreen extends StatefulWidget {
   const ParentDashboardScreen({super.key});
