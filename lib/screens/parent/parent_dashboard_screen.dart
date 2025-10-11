@@ -75,7 +75,15 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
 
       // Filter recentHistory to only include books with progress > 0 (ongoing or completed)
       final allRecent = analyticsData['recentBooks'] ?? [];
-      final filteredRecent = allRecent.where((session) => (session['progressPercentage'] ?? 0.0) > 0.0).toList();
+      final filteredRecent = allRecent
+          .where((session) {
+            if (session is Map<String, dynamic>) {
+              return (session['progressPercentage'] ?? 0.0) > 0.0;
+            }
+            return false;
+          })
+          .cast<Map<String, dynamic>>()
+          .toList();
 
       setState(() {
         analytics = analyticsData;
