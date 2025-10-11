@@ -72,10 +72,14 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
       final analyticsData = await AnalyticsService().getParentAnalytics(selectedChildId!);
       final contentFilter = await ContentFilterService().getContentFilter(selectedChildId!);
       final todayMinutesVal = await ContentFilterService().getDailyReadingTime(selectedChildId!);
-      
+
+      // Filter recentHistory to only include books with progress > 0 (ongoing or completed)
+      final allRecent = analyticsData['recentBooks'] ?? [];
+      final filteredRecent = allRecent.where((session) => (session['progressPercentage'] ?? 0.0) > 0.0).toList();
+
       setState(() {
         analytics = analyticsData;
-        recentHistory = analyticsData['recentBooks'] ?? [];
+        recentHistory = filteredRecent;
         allowedCategories = contentFilter?.allowedCategories ?? [];
         readingGoal = contentFilter?.maxReadingTimeMinutes ?? 0;
         todayMinutes = todayMinutesVal;
